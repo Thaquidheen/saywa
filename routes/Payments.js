@@ -29,178 +29,163 @@ const processs = require("process");
 // ---------------------------------------------------------
 //  1) Define the Stripe webhook route with express.raw()
 // ---------------------------------------------------------
-router.post("/webhook",
-  express.raw({ type: "application/json" }), // <-- Raw body for Stripe
-  async (req, res) => {
-    const endpointSecret = process.env.STRIPE_WEBHOOK;
-    const sig = req.headers["stripe-signature"];
-    let event;
+router.post("/", async (req, res) => {
+  const endpointSecret = process.env.STRIPE_WEBHOOK;
+  const sig = req.headers["stripe-signature"];
+  let event;
+
+  try {
+    // Construct event using the raw body (req.body) and signature
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error(`Webhook Error: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
 
     try {
-      // IMPORTANT: pass req.body (the raw Buffer) to constructEvent
-      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-    } catch (err) {
-      console.error(`Webhook Error: ${err.message}`);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
+      // 1) Extract trip data from session.metadata
+      const {
+        tripNo,
+        source,
+        destination = "",
+        vehicleId,
+        customerId,
+        customerName = "",
+        rideType,
+        scheduledDate,
+        scheduledTime = "",
+        totalAmount,
+        stops,
+        paymentMode = "Card",
+        noOfPassengers = "1",
+        documents = "[]",
+        noOfBags,
+        meetAndGreet,
+        tripOccasion,
+        tripOccasionDetails,
+        totalKms,
+        totalHours,
+        bagType,
+        flightInformation,
+        needCarSeat,
+        seatCount,
+        additionalInfo,
+        gratuiryTypeCash,
+        gratuityAmount,
+        returnDate,
+        returnTime,
+        returnMeetAndGreet,
+        returnGratuity,
+        returnSeats,
+        returnAdditionalInfo,
+        returnTotalKms,
+        returnBagType,
+        returnCarryOnBagsCount,
+        returnCheckedBagCount,
+        returnNeedWheelChair,
+        returnDiscount,
+      } = session.metadata || {};
 
-    // Handle the event
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
+      console.log("Metadata received:", session.metadata);
 
+      // 2) Parse JSON fields if needed
+      let parsedStops = [];
       try {
-        // ---------------------------------------------------------
-        // 2) Extract trip data from session.metadata
-        // ---------------------------------------------------------
-        const {
-          no,
-          tripNo,
-          source,
-          destination = "",
-          vehicleId,
-          customerId,
-          customerName = "",
-          rideType,
-          scheduledDate,
-          scheduledTime = "",
-          totalAmount,
-          stops,
-          paymentMode = "Card",
-          noOfPassengers = "1",
-          documents = "[]",
-          noOfBags,
-          meetAndGreet,
-          tripOccasion,
-          tripOccasionDetails,
-          totalKms,
-          totalHours,
-          bagType,
-          flightInformation,
-          needCarSeat,
-          seatCount,
-          additionalInfo,
-          gratuiryTypeCash,
-          gratuityAmount,
-          returnDate,
-          returnTime,
-          returnMeetAndGreet,
-          returnGratuity,
-          returnSeats,
-          returnAdditionalInfo,
-          returnTotalKms,
-          returnBagType,
-          returnCarryOnBagsCount,
-          returnCheckedBagCount,
-          returnNeedWheelChair,
-          returnDiscount,
-        } = session.metadata;
-
-        console.log("Metadata received:", session.metadata);
-
-        // Parse stops
-        let parsedStops = [];
-        try {
-          parsedStops = JSON.parse(stops || "[]");
-          console.log("Parsed stops:", parsedStops);
-        } catch (parseError) {
-          console.error("Error parsing stops:", parseError);
-        }
-
-        // Parse documents
-        let parsedDocuments = [];
-        try {
-          parsedDocuments = JSON.parse(documents || "[]");
-          console.log("Parsed documents:", parsedDocuments);
-        } catch (parseError) {
-          console.error("Error parsing documents:", parseError);
-        }
-
-        // ---------------------------------------------------------
-        // 3) Create and save the trip in MongoDB
-        // ---------------------------------------------------------
-        const tripCount = (await Trips.find()).length;
-        const tripDoc = new Trips({
-          no: tripCount + 1,
-          tripNo,
-          source,
-          destination,
-          vehicleId,
-          customerId,
-          customerName,
-          rideType,
-          scheduledDate,
-          scheduledTime,
-          totalAmount: parseFloat(totalAmount),
-          stops: parsedStops,
-          paymentMode,
-          noOfPassengers,
-          documents: parsedDocuments,
-          tripStatus: "Confirmed",
-          paymentStatus: "Completed",
-          paymentId: session.payment_intent,
-          paymentReference: session.id,
-          noOfBags,
-          meetAndGreet,
-          tripOccasion,
-          tripOccasionDetails,
-          totalKms,
-          totalHours,
-          bagType,
-          flightInformation,
-          needCarSeat,
-          seatCount,
-          additionalInfo,
-          gratuiryTypeCash,
-          gratuityAmount,
-          returnDate,
-          returnTime,
-          returnMeetAndGreet,
-          returnGratuity,
-          returnSeats,
-          returnAdditionalInfo,
-          returnTotalKms,
-          returnBagType,
-          returnCarryOnBagsCount,
-          returnCheckedBagCount,
-          returnNeedWheelChair,
-          returnDiscount,
-        });
-
-        const savedTrip = await tripDoc.save();
-        console.log(`Trip created successfully for payment session ${session.id}`);
-
-        // ---------------------------------------------------------
-        // 4) Send Emails or Notifications
-        // ---------------------------------------------------------
-        await sendTripSuccessMailToClient(savedTrip);
-        await sendTripSuccessMailToAdmin(savedTrip);
-
-        // Handle referral logic
-        try {
-          const refererEmail = await handleReferralCompletion(
-            customerId,
-            savedTrip._id,
-            totalAmount
-          );
-          console.log(`Referral wallet updated for referer: ${refererEmail}`);
-        } catch (referralError) {
-          console.error(
-            "Error handling referral completion:",
-            referralError.message
-          );
-        }
-
-        return res.status(200).json({ received: true });
-      } catch (error) {
-        console.error("Error creating trip from webhook:", error);
-        return res.status(500).json({ error: "Internal Server Error" });
+        parsedStops = JSON.parse(stops || "[]");
+      } catch (parseError) {
+        console.error("Error parsing stops:", parseError);
       }
-    } else {
-      // Other event types
+
+      let parsedDocuments = [];
+      try {
+        parsedDocuments = JSON.parse(documents || "[]");
+      } catch (parseError) {
+        console.error("Error parsing documents:", parseError);
+      }
+
+      // 3) Create and save the trip in MongoDB
+      const tripCount = (await Trips.find()).length;
+      const tripDoc = new Trips({
+        no: tripCount + 1,
+        tripNo,
+        source,
+        destination,
+        vehicleId,
+        customerId,
+        customerName,
+        rideType,
+        scheduledDate,
+        scheduledTime,
+        totalAmount: parseFloat(totalAmount),
+        stops: parsedStops,
+        paymentMode,
+        noOfPassengers,
+        documents: parsedDocuments,
+        tripStatus: "Confirmed",
+        paymentStatus: "Completed",
+        paymentId: session.payment_intent,
+        paymentReference: session.id,
+        noOfBags,
+        meetAndGreet,
+        tripOccasion,
+        tripOccasionDetails,
+        totalKms,
+        totalHours,
+        bagType,
+        flightInformation,
+        needCarSeat,
+        seatCount,
+        additionalInfo,
+        gratuiryTypeCash,
+        gratuityAmount,
+        returnDate,
+        returnTime,
+        returnMeetAndGreet,
+        returnGratuity,
+        returnSeats,
+        returnAdditionalInfo,
+        returnTotalKms,
+        returnBagType,
+        returnCarryOnBagsCount,
+        returnCheckedBagCount,
+        returnNeedWheelChair,
+        returnDiscount,
+      });
+
+      const savedTrip = await tripDoc.save();
+      console.log(`Trip created successfully for payment session ${session.id}`);
+
+      // 4) Send Emails or Notifications
+      await sendTripSuccessMailToClient(savedTrip);
+      await sendTripSuccessMailToAdmin(savedTrip);
+
+      // 5) Handle referral logic
+      try {
+        const refererEmail = await handleReferralCompletion(
+          customerId,
+          savedTrip._id,
+          totalAmount
+        );
+        console.log(`Referral wallet updated for referer: ${refererEmail}`);
+      } catch (referralError) {
+        console.error("Error handling referral completion:", referralError.message);
+      }
+
       return res.status(200).json({ received: true });
+    } catch (error) {
+      console.error("Error creating trip from webhook:", error);
+      return res.status(500).json({ error: "Internal Server Error" });
     }
+  } else {
+    // Return a 200 for any other events you are not handling
+    return res.status(200).json({ received: true });
   }
-);
+});
+
 
 // ---------------------------------------------------------
 // Referral handling

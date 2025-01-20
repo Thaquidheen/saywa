@@ -2,4 +2,4 @@ node_modules
 .env
 credentials.json
 gmail_token.json
-token*.json
+token*.jsonxx``

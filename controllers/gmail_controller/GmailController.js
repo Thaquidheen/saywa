@@ -1,47 +1,35 @@
-const fs = require("fs");
-const path = require("path");
 const { google } = require("googleapis");
 const nodemailer = require("nodemailer");
 
-// Define the path for credentials and token
-const CREDENTIALS_PATH = path.join(process.cwd(), "credentials.json");
-const TOKEN_PATH = path.join(process.cwd(), "gmail_token.json");
+// Define the required scope for Gmail API
 const SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 
-// Load client secrets from a local file and authorize the client
+// Load credentials and token from environment variables
+const CREDENTIALS_JSON = process.env.CREDENTIALS_JSON; // Entire content of credentials.json stored in an environment variable
+const GMAIL_TOKEN_JSON = process.env.GMAIL_TOKEN_JSON; // Entire content of gmail_token.json stored in an environment variable
+
+// Authorize the client with credentials and tokens
 async function authorize() {
-  const content = fs.readFileSync(CREDENTIALS_PATH);
+  if (!CREDENTIALS_JSON || !GMAIL_TOKEN_JSON) {
+    throw new Error("Missing CREDENTIALS_JSON or GMAIL_TOKEN_JSON in environment variables.");
+  }
 
-  const { client_secret, client_id, redirect_uris } = JSON.parse(content).web;
+  const { client_secret, client_id, redirect_uris } = JSON.parse(CREDENTIALS_JSON).web;
 
-  const oAuth2Client = new google.auth.OAuth2(
-    client_id,
-    client_secret,
-    redirect_uris[0]
-  );
+  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
 
   try {
-    const token = fs.readFileSync(TOKEN_PATH);
-    oAuth2Client.setCredentials(JSON.parse(token));
+    oAuth2Client.setCredentials(JSON.parse(GMAIL_TOKEN_JSON));
     return oAuth2Client;
-  } catch (err) {
-    return getNewToken(oAuth2Client);
+  } catch (error) {
+    console.error("Error loading Gmail token:", error.message);
+    throw new Error("Failed to authorize Gmail API client.");
   }
-}
-
-// Get a new token if it doesn't exist
-function getNewToken(oAuth2Client) {
-  const authUrl = oAuth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: SCOPES,
-  });
-  console.log("Authorize this app by visiting this url:", authUrl);
 }
 
 // Function to send an email using Gmail API and nodemailer
 async function sendEmail(auth, { from, to, subject, text, attachments }) {
   // Create a nodemailer transport
-
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -55,26 +43,26 @@ async function sendEmail(auth, { from, to, subject, text, attachments }) {
 
   const mailOptions = {
     from: `Saywa <reservations@saywalimo.com>`, // Use sender's email
-    to: to, // Recipient email
-    subject: subject,
-    html: text,
-    attachments,
+    to, // Recipient email
+    subject, // Email subject
+    html: text, // Email body (HTML content)
+    attachments, // Email attachments (if any)
   };
 
   // Send mail
   return new Promise((resolve, reject) => {
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
-        console.log("Error: " + error);
-        reject("Email sending failed");
+        console.error("Error sending email:", error);
+        return reject("Email sending failed");
       }
-      console.log("Email sent: " + info.response);
+      console.log("Email sent:", info.response);
       resolve("Email sent successfully");
     });
   });
 }
 
-// Email handler function
+// Function to handle sending an email
 async function handleSendEmail(data) {
   const auth = await authorize();
 
@@ -88,27 +76,12 @@ async function handleSendEmail(data) {
 
     return result;
   } catch (error) {
-    return error;
+    console.error("Error in handleSendEmail:", error);
+    throw error;
   }
 }
 
-async function handleSendEmail(data) {
-  const auth = await authorize();
-
-  try {
-    const result = await sendEmail(auth, {
-      from: "reservations@saywalimo.com",
-      to: data.to,
-      subject: data.subject,
-      text: data.text,
-    });
-
-    return result;
-  } catch (error) {
-    return error;
-  }
-}
-
+// Function to handle sending an email with attachments
 async function handleSendEmailAttachment(data) {
   const auth = await authorize();
 
@@ -123,7 +96,8 @@ async function handleSendEmailAttachment(data) {
 
     return result;
   } catch (error) {
-    return error;
+    console.error("Error in handleSendEmailAttachment:", error);
+    throw error;
   }
 }
 

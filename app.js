@@ -78,7 +78,7 @@ const login = require("./routes/Login");
 const users = require("./routes/Users");
 
 const vehicles = require("./routes/Vehicles");
-const webhookRouter = require("./routes/Payments");
+
 const trips = require("./routes/Trips");
 const customers = require("./routes/Customers");
 // const payments = require("./routes/Payments");
@@ -89,7 +89,7 @@ const test = require("./routes/test");
 const PACKAGES = require("./routes/Packages");
 const TAX = require("./routes/Tax");
 
-app.use("/", express.raw({ type: "application/json" }), webhookRouter);
+
 
 
 app.use(express.json());

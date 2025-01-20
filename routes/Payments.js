@@ -6,7 +6,10 @@ const VEHICLES = require("../models/Vehicles");
 const nodemailer = require("nodemailer");
 const REFERALS = require("../models/Referals");
 const Vehicle = require("../models/Vehicles");
-
+const {
+  handleSendEmail,
+  handleSendEmailAttachment,
+} = require("../controllers/gmail_controller/GmailController");
 const PDFDocument = require("pdfkit");
 
 // Use express.raw() to get the raw request body
@@ -362,320 +365,80 @@ router.use(express.raw({ type: "application/json" }));
 //   }
 // }
 
+// In your sendTripSuccessMailToClient function:
 async function sendTripSuccessMailToClient(tripData) {
   try {
-    // Retrieve customer details using the trip's customer ID
+    // Retrieve the customer's record
     const custData = await Customers.find({ user_id: tripData.customerId }).limit(1);
+
     if (!custData[0] || !custData[0].email) {
       console.error("Customer email not found.");
       return;
     }
 
-    // Build a simple plain text message with basic trip details.
+    // Prepare the email body (HTML or simple text).
     const emailBody = `
-Dear ${custData[0].fullName},
-
-Thank you for riding with Saywa!
-
-Here are your trip details:
-- Trip No: ${tripData.tripNo}
-- From: ${tripData.source}
-- To: ${tripData.destination || "N/A"}
-- Date: ${tripData.scheduledDate}
-- Time: ${tripData.scheduledTime}
-- Total Amount: $${parseFloat(tripData.totalAmount).toFixed(2)}
-
-We hope you had a pleasant experience. If you have any questions or need further assistance, please reply to this email.
-
-Best regards,
-Saywa Team
+      Dear ${custData[0].fullName},<br/><br/>
+      Thank you for riding with Saywa!
+      <br/><br/>
+      <strong>Trip Details:</strong>
+      <ul>
+        <li>Trip No: ${tripData.tripNo}</li>
+        <li>From: ${tripData.source}</li>
+        <li>To: ${tripData.destination || "N/A"}</li>
+        <li>Date: ${tripData.scheduledDate}</li>
+        <li>Time: ${tripData.scheduledTime}</li>
+        <li>Total Amount: $${parseFloat(tripData.totalAmount).toFixed(2)}</li>
+      </ul>
+      <br/>
+      We hope you had a pleasant experience. If you have any questions, please reply to this email.
+      <br/><br/>
+      Best regards,<br/>
+      <strong>Saywa Team</strong>
     `;
 
-    // Build mail options without any attachments
-    const mailOptions = {
-      from: `"Saywa" <${process.env.CONTACT_EMAIL}>`,
+    // Now use handleSendEmail from gmailController.js
+    await handleSendEmail({
       to: custData[0].email,
       subject: "Thank You for Riding with Saywa!",
-      text: emailBody,
-    };
-
-    // Create transporter and send email using Nodemailer
-    const transporter = nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE,
-      host: process.env.EMAIL_HOST_NAME,
-      port: process.env.EMAIL_PORT,
-      secure: true,
-      auth: {
-        user: process.env.AUTH_EMAIL_USER,
-        pass: process.env.AUTH_EMAIL_PASSWORD,
-      },
+      text: emailBody, // or "html": emailBody if you prefer renaming
     });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Email sent successfully:", info.response);
+    console.log("Client confirmation email sent via Gmail OAuth2!");
   } catch (error) {
     console.error("Error in sendTripSuccessMailToClient:", error);
     throw error;
   }
 }
-  
+
 async function sendTripSuccessMailToAdmin(tripData) {
-  const custDatax = await CUSTOMERMODAL.find({
-    user_id: tripData.customerId,
-  });
-  
-  // mail setup
-  let transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE,
-    host: process.env.EMAIL_HOST_NAME,
-    port: process.env.EMAIL_PORT,
-    secure: true, // true for 465, false for other ports
-    auth: {
-      user: process.env.AUTH_EMAIL_USER,
-      pass: process.env.AUTH_EMAIL_PASSWORD,
-    },
-  });
+  try {
+    const custDatax = await CUSTOMERMODAL.find({ user_id: tripData.customerId });
+    const adminEmailBody = `
+      <h1>New Booking Received</h1>
+      <p>Dear Admin, you have a new booking from ${tripData.customerName}</p>
+      <ul>
+        <li>Trip Type: ${tripData.rideType}</li>
+        <li>Departure: ${tripData.source}</li>
+        <li>Destination: ${tripData.destination}</li>
+        <li>Date &amp; Time: ${tripData.scheduledDate}, ${tripData.scheduledTime}</li>
+      </ul>
+      <p>Please log in to the admin panel to view more details.</p>
+    `;
 
-  // const query = { paymentId: paymentID };
-  // const tripData = await Trips.find(query).limit(1);
+    await handleSendEmail({
+      to: `${process.env.ADMIN_MAIL},${process.env.CONTACT_EMAIL}`,
+      subject: "New Trip Received",
+      text: adminEmailBody,
+    });
 
-  //   Mail Data
-  const mailOptions = {
-    from: `"Saywa Limo" <${process.env.NO_REPLY}>`,
-    to: `${process.env.ADMIN_MAIL},${process.env.CONTACT_EMAIL}`,
-    subject: "New trip received",
-    html: `<table
-    width="100%"
-    id="m_-4521581668634247801outer_wrapper"
-    style="background-color: #f7f7f7"
-    bgcolor="#f7f7f7"
-  >
-    <tbody>
-      <tr>
-        <td></td>
-        <td width="600">
-          <div
-            id="m_-4521581668634247801wrapper"
-            dir="ltr"
-            style="margin: 0 auto; padding: 70px 0; width: 100%; max-width: 600px"
-            width="100%"
-          >
-            <table
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              height="100%"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td align="center" valign="top">
-                    <div id="m_-4521581668634247801template_header_image"></div>
-                    <table
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      width="100%"
-                      id="m_-4521581668634247801template_container"
-                      style="
-                        background-color: #fff;
-                        border: 1px solid #dedede;
-                        border-radius: 3px;
-                      "
-                      bgcolor="#fff"
-                    >
-                      <tbody>
-                        <tr>
-                          <td align="center" valign="top">
-                            <table
-                              border="0"
-                              cellpadding="0"
-                              cellspacing="0"
-                              width="100%"
-                              id="m_-4521581668634247801template_header"
-                              style="
-                                background-color: #000000;
-                                color: #fff;
-                                border-bottom: 0;
-                                font-weight: bold;
-                                line-height: 100%;
-                                vertical-align: middle;
-                                font-family: 'Helvetica Neue', Helvetica, Roboto,
-                                  Arial, sans-serif;
-                                border-radius: 3px 3px 0 0;
-                              "
-                              bgcolor="#0c9991"
-                            >
-                              <tbody>
-                                <tr>
-                                  <td
-                                    id="m_-4521581668634247801header_wrapper"
-                                    style="padding: 36px 48px; display: block"
-                                  >
-                                    <h1
-                                      style="
-                                        font-family: 'Helvetica Neue', Helvetica,
-                                          Roboto, Arial, sans-serif;
-                                        font-size: 30px;
-                                        font-weight: 300;
-                                        line-height: 150%;
-                                        margin: 0;
-                                        text-align: left;
-                                        color: #fff;
-                                        background-color: inherit;
-                                      "
-                                      bgcolor="inherit"
-                                    >
-                                      New Booking
-                                    </h1>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td align="center" valign="top">
-                            <table
-                              border="0"
-                              cellpadding="0"
-                              cellspacing="0"
-                              width="100%"
-                              id="m_-4521581668634247801template_body"
-                            >
-                              <tbody>
-                                <tr>
-                                  <td
-                                    valign="top"
-                                    id="m_-4521581668634247801body_content"
-                                    style="background-color: #fff"
-                                    bgcolor="#fff"
-                                  >
-                                    <table
-                                      border="0"
-                                      cellpadding="20"
-                                      cellspacing="0"
-                                      width="100%"
-                                    >
-                                      <tbody>
-                                        <tr>
-                                          <td
-                                            valign="top"
-                                            style="padding: 48px 48px 32px"
-                                          >
-                                            <div
-                                              id="m_-4521581668634247801body_content_inner"
-                                              style="
-                                                color: #636363;
-                                                font-family: 'Helvetica Neue',
-                                                  Helvetica, Roboto, Arial,
-                                                  sans-serif;
-                                                font-size: 14px;
-                                                line-height: 150%;
-                                                text-align: left;
-                                              "
-                                              align="left"
-                                            >
-                                            <p>Dear ${custDatax[0].fullName},</p>
-                                              <p style="margin: 0 0">
-                                                Thank you for your booking. We will provide you with regular updates on the status of your trip.
-                                              </p>
-                                              <br />
-                                              <h2
-                                                style="
-                                                  color: #00000;
-                                                  display: block;
-                                                  font-family: 'Helvetica Neue',
-                                                    Helvetica, Roboto, Arial,
-                                                    sans-serif;
-                                                  font-size: 18px;
-                                                  font-weight: bold;
-                                                  line-height: 130%;
-                                                  margin: 0 0;
-                                                  text-align: left;
-                                                  margin-bottom:10px
-                                                "
-                                              >
-                                                Trip Information
-
-                                              </h2>
-                                              
-                                              <ul>
-                                              <li>
-                                              Passenger Name: ${tripData.customerName}
-                                              </li>
-                                              <li>
-                                                Trip Type: ${tripData.rideType}
-                                              </li>
-                                              <li>
-                                                Departure :  ${tripData.source} 
-                                                  </li>
-                                         
-                                             <li>
-                                                Destination: ${tripData.destination}
-                                              </li> 
-                                              <li>
-                                                Departure Time : ${tripData.scheduledDate}, ${tripData.scheduledTime} 
-                                              </li>
-                                              </ul>
-                                             
-                                            
-  
-                                              <p></p>
-                                              <div
-                                                style="
-                                                  display: flex;
-                                                  justify-content: center;
-                                                "
-                                              >
-                                                <a
-                                                  href="https://admin.saywalimo.com/trip_action/${tripData._id}"
-                                                  style="
-                                                    text-decoration: none;
-                                                    color: #ffffff;
-                                                  "
-                                                  ><div
-                                                    style="
-                                                      background: #c19b65;
-                                                      padding: 10px;
-                                                      border-radius: 10px;
-                                                      width: 200px;
-                                                      text-align: center;
-                                                    "
-                                                  >
-                                                    <strong>View trip</strong>
-                                                  </div></a
-                                                >
-                                              </div>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  `,
-  };
-
-  //   Send Action
-  transporter.sendMail(mailOptions);
+    console.log("Admin notification sent via Gmail OAuth2!");
+  } catch (error) {
+    console.error("Error in sendTripSuccessMailToAdmin:", error);
+    throw error;
+  }
 }
+
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"];
 const TOKEN_PATH = path.join(processs.cwd(), "tokenx.json");

@@ -1,0 +1,53 @@
+// Mail setup
+const nodemailer = require('nodemailer');
+
+let transporter = nodemailer.createTransport({
+  host: "mail.ahydratech.com",
+  port: 465,
+  secure: true, // true for 465, false for other ports
+  auth: {
+    user: "noreply@ahydratech.com", // generated ethereal user
+    pass: "WuNr2]fpg(D,", // generated ethereal password
+  },
+});
+
+// Mail Data
+const mailOptions = {
+  from: `"Saywa" <noreply@ahydratech.com>`, // Use actual email if process.env.NO_REPLY is not set
+  to: req.body.to, // Ensure this is the recipient email address
+  subject: "Saywa Limo Driver Assignment Confirmation",
+  html: `<div style="padding: 20px;">
+    <p style="text-align: left;">Dear user,</p>
+    <p style="text-align: left;">We hope this message finds you well. Thank you for choosing Saywa Limo for your upcoming trip. We are delighted to inform you that a professional driver has been assigned to cater to your transportation needs.</p>
+    <table style="border-collapse: collapse; width: 100%;" border="1">
+      <tbody>
+        <tr>
+          <td><strong>Driver's Name</strong></td>
+          <td><strong>Contact Number</strong></td>
+          <td><strong>Vehicle Information</strong></td>
+          <td><strong>License Plate Number</strong></td>
+        </tr>
+        <tr>
+          <td>${driverName}</td>
+          <td>${driverContactNo}</td>
+          <td>${vehicleType}</td>
+          <td>${vehicleNo}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Should you have any specific requirements or if there are changes to your travel plans, please feel free to contact our customer support at [Customer Support Email/Phone].</p>
+    <p>Your satisfaction and safety are our top priorities, and we assure you that our driver will provide you with a comfortable and secure journey.</p>
+    <p>Thank you for choosing Saywa Limo. We look forward to serving you and ensuring a seamless travel experience.</p>
+    <p>Best regards,<br/>Saywa Limo Support Team</p>
+  </div>`,
+};
+
+// Send Action
+transporter.sendMail(mailOptions, (error, info) => {
+  if (error) {
+    console.log("Error occurred:", error);
+    return res.status(500).send({ message: "Mail not sent", error });
+  }
+  console.log("Message sent: %s", info.messageId);
+  res.status(200).send({ message: "Mail sent successfully", info });
+});

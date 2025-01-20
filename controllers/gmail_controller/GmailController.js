@@ -1,47 +1,37 @@
-const fs = require("fs");
-const path = require("path");
 const { google } = require("googleapis");
 const nodemailer = require("nodemailer");
 
-// Define the path for credentials and token
-const CREDENTIALS_PATH = path.join(process.cwd(), "credentials.json");
-const TOKEN_PATH = path.join(process.cwd(), "gmail_token.json");
+// Define the required scope for Gmail API
 const SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 
-// Load client secrets from a local file and authorize the client
 async function authorize() {
-  const content = fs.readFileSync(CREDENTIALS_PATH);
+  // Ensure your env variables exist:
+  if (!process.env.CREDENTIALS_JSON || !process.env.GMAIL_TOKEN_JSON) {
+    throw new Error("Missing CREDENTIALS_JSON or GMAIL_TOKEN_JSON in environment variables.");
+  }
 
-  const { client_secret, client_id, redirect_uris } = JSON.parse(content).web;
+  // Parse the JSON from environment variables
+  const credentials = JSON.parse(process.env.CREDENTIALS_JSON);
+  const token = JSON.parse(process.env.GMAIL_TOKEN_JSON);
 
+  // Destructure the relevant fields from credentials
+  const { client_secret, client_id, redirect_uris } = credentials.web;
+
+  // Create an OAuth2 client
   const oAuth2Client = new google.auth.OAuth2(
     client_id,
     client_secret,
     redirect_uris[0]
   );
 
-  try {
-    const token = fs.readFileSync(TOKEN_PATH);
-    oAuth2Client.setCredentials(JSON.parse(token));
-    return oAuth2Client;
-  } catch (err) {
-    return getNewToken(oAuth2Client);
-  }
-}
+  // Set the token
+  oAuth2Client.setCredentials(token);
 
-// Get a new token if it doesn't exist
-function getNewToken(oAuth2Client) {
-  const authUrl = oAuth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: SCOPES,
-  });
-  console.log("Authorize this app by visiting this url:", authUrl);
+  return oAuth2Client;
 }
 
 // Function to send an email using Gmail API and nodemailer
 async function sendEmail(auth, { from, to, subject, text, attachments }) {
-  // Create a nodemailer transport
-
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -54,21 +44,20 @@ async function sendEmail(auth, { from, to, subject, text, attachments }) {
   });
 
   const mailOptions = {
-    from: `Saywa <reservations@saywalimo.com>`, // Use sender's email
-    to: to, // Recipient email
-    subject: subject,
+    from: `Saywa <${from}>`,
+    to,
+    subject,
     html: text,
     attachments,
   };
 
-  // Send mail
   return new Promise((resolve, reject) => {
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
-        console.log("Error: " + error);
-        reject("Email sending failed");
+        console.error("Error sending email:", error);
+        return reject("Email sending failed");
       }
-      console.log("Email sent: " + info.response);
+      console.log("Email sent:", info.response);
       resolve("Email sent successfully");
     });
   });
@@ -77,7 +66,6 @@ async function sendEmail(auth, { from, to, subject, text, attachments }) {
 // Email handler function
 async function handleSendEmail(data) {
   const auth = await authorize();
-
   try {
     const result = await sendEmail(auth, {
       from: "reservations@saywalimo.com",
@@ -85,33 +73,16 @@ async function handleSendEmail(data) {
       subject: data.subject,
       text: data.text,
     });
-
     return result;
   } catch (error) {
-    return error;
+    console.error("Error in handleSendEmail:", error);
+    throw error;
   }
 }
 
-async function handleSendEmail(data) {
-  const auth = await authorize();
-
-  try {
-    const result = await sendEmail(auth, {
-      from: "reservations@saywalimo.com",
-      to: data.to,
-      subject: data.subject,
-      text: data.text,
-    });
-
-    return result;
-  } catch (error) {
-    return error;
-  }
-}
-
+// Email handler function with attachments
 async function handleSendEmailAttachment(data) {
   const auth = await authorize();
-
   try {
     const result = await sendEmail(auth, {
       from: "reservations@saywalimo.com",
@@ -120,10 +91,10 @@ async function handleSendEmailAttachment(data) {
       text: data.text,
       attachments: data.attachments,
     });
-
     return result;
   } catch (error) {
-    return error;
+    console.error("Error in handleSendEmailAttachment:", error);
+    throw error;
   }
 }
 

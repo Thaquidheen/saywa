@@ -20,8 +20,9 @@ const { authenticate } = require("@google-cloud/local-auth");
 const { google } = require("googleapis");
 const Customers = require("../models/Customers");
 const router = express.Router();
-router.use(express.raw({ type: "application/json" }));
-  router.post("/webhook", async (req, res) => {
+  router.post("/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
     const endpointSecret = process.env.STRIPE_WEBHOOK;
     const sig = req.headers["stripe-signature"];
     let event;

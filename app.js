@@ -80,7 +80,8 @@ app.use(
     },
   })
 );
-
+const webhookRouter = require("./routes/Payments");
+app.use("/", webhookRouter);
 app.use(
   express.json({
     limit: "5mb",
@@ -95,7 +96,7 @@ const login = require("./routes/Login");
 const users = require("./routes/Users");
 
 const vehicles = require("./routes/Vehicles");
-const webhookRouter = require("./routes/Payments");
+
 const trips = require("./routes/Trips");
 const customers = require("./routes/Customers");
 // const payments = require("./routes/Payments");
@@ -114,8 +115,6 @@ app.use("/api/users", users);
 app.use("/api/vehicles", vehicles);
 app.use("/api/trip", trips);
 app.use("/api/customers", customers);
-app.use("/", webhookRouter);
-// app.use("/api/payments", payments);
 app.use("/api/notifications", notifications);
 app.use("/api/upload", uploadRouter);
 app.use("/api/referal", referal);
